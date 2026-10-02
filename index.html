@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>مشروع القتال الخطي - Prototype 0.1</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#111;color:#fff;font-family:Arial}
+canvas{display:block;width:100vw;height:100vh;background:#182027}
+#hud{position:fixed;top:12px;right:12px;z-index:3;background:#0009;padding:10px 14px;border-radius:10px}
+#hint{font-size:13px;color:#ddd;margin-top:4px}
+.pad{position:fixed;bottom:20px;z-index:4;display:flex;gap:10px}
+#move{left:18px;direction:ltr}
+#fight{right:18px;direction:ltr}
+button{width:62px;height:62px;border:0;border-radius:50%;background:#ffffff22;color:#fff;font-size:18px;font-weight:bold;touch-action:none}
+button:active{background:#fff5}
+.small{width:54px;height:54px}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">
+  <b>المستودع — المهمة 1</b>
+  <div id="hint">تحرك ← → • اضرب • صد • اقترب من الخصم</div>
+  <div id="status"></div>
+</div>
+<div class="pad" id="move">
+  <button data-key="left">←</button><button data-key="right">→</button>
+</div>
+<div class="pad" id="fight">
+  <button class="small" data-key="block">صد</button>
+  <button class="small" data-key="grab">مسك</button>
+  <button data-key="attack">ضرب</button>
+</div>
+<script>
+const c=document.getElementById('game'),ctx=c.getContext('2d'),status=document.getElementById('status');
+let W,H,keys={},last=0;
+const player={x:150,y:0,w:34,h:62,hp:100,attack:0,block:false,grab:0};
+const enemy={x:650,y:0,w:36,h:62,hp:100,attack:0,stun:0,dir:-1};
+const crates=[{x:430,w:55,h:55},{x:790,w:50,h:50}];
+
+function resize(){W=c.width=innerWidth*devicePixelRatio;H=c.height=innerHeight*devicePixelRatio;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);W=innerWidth;H=innerHeight;player.y=H-150;enemy.y=H-150}
+addEventListener('resize',resize); resize();
+
+function down(k){keys[k]=true} function up(k){keys[k]=false}
+addEventListener('keydown',e=>{let m={ArrowLeft:'left',ArrowRight:'right',a:'left',d:'right',j:'attack',k:'block',l:'grab'}[e.key];if(m)down(m)});
+addEventListener('keyup',e=>{let m={ArrowLeft:'left',ArrowRight:'right',a:'left',d:'right',j:'attack',k:'block',l:'grab'}[e.key];if(m)up(m)});
+document.querySelectorAll('button').forEach(b=>{
+ const k=b.dataset.key;
+ b.onpointerdown=e=>{e.preventDefault();down(k)}
+ b.onpointerup=e=>{e.preventDefault();up(k)}
+ b.onpointercancel=()=>up(k); b.onpointerleave=()=>up(k);
+});
+
+function rect(x,y,w,h){ctx.fillRect(x,y,w,h)}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ // rainy industrial corridor
+ ctx.fillStyle='#10161b';rect(0,0,W,H);
+ ctx.fillStyle='#29343a';rect(0,H-210,W,210);
+ ctx.fillStyle='#1c252a';rect(0,H-250,W,40);
+ for(let x=0;x<W;x+=80){ctx.strokeStyle='#344148';ctx.beginPath();ctx.moveTo(x,H-210);ctx.lineTo(x+35,H);ctx.stroke()}
+ // background buildings/warehouse
+ ctx.fillStyle='#202a2e';rect(0,50,W,90);
+ ctx.fillStyle='#0c1114';for(let x=20;x<W;x+=95)rect(x,70,55,40);
+ ctx.fillStyle='#c77b35';ctx.font='bold 20px Arial';ctx.fillText('THE BUSTED KNUCKLE',20,35);
+ // rain
+ ctx.strokeStyle='#ffffff16';for(let i=0;i<100;i++){let x=(i*97+performance.now()/8)%W;let y=(i*53)%H;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-8,y+18);ctx.stroke()}
+ // crates
+ ctx.fillStyle='#795333';crates.forEach(o=>{rect(o.x,H-205,o.w,o.h);ctx.strokeStyle='#b08050';ctx.strokeRect(o.x,H-205,o.w,o.h)});
+ // characters
+ drawFighter(player,'#d8d8d8','#4b77a8'); drawFighter(enemy,'#bdbdbd','#9b3d3d');
+ // attack arc
+ if(player.attack>0){ctx.strokeStyle='#eee';ctx.lineWidth=5;ctx.beginPath();ctx.arc(player.x+(player.dir||1)*22,player.y+30,45,-.8,.8);ctx.stroke();ctx.lineWidth=1}
+}
+
+function drawFighter(p,skin,shirt){
+ ctx.fillStyle=skin;ctx.beginPath();ctx.arc(p.x+p.w/2,p.y-9,15,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle=shirt;rect(p.x,p.y+7,p.w,38);
+ ctx.fillStyle='#222';rect(p.x+3,p.y+45,11,17);rect(p.x+20,p.y+45,11,17);
+ if(p.block){ctx.strokeStyle='#9cf';ctx.lineWidth=5;ctx.strokeRect(p.x-6,p.y+2,p.w+12,52);ctx.lineWidth=1}
+}
+
+function dist(){return Math.abs((player.x+17)-(enemy.x+18))}
+function update(dt){
+ player.dir=keys.left?-1:keys.right?1:player.dir||1;
+ if(keys.left)player.x-=180*dt;if(keys.right)player.x+=180*dt;
+ player.x=Math.max(20,Math.min(W-55,player.x));
+ player.block=!!keys.block;
+ if(keys.attack && player.attack<=0){player.attack=.25;keys.attack=false}
+ if(player.attack>0)player.attack-=dt;
+ if(keys.grab && player.grab<=0 && dist()<75){player.grab=.5;keys.grab=false}
+ if(player.grab>0)player.grab-=dt;
+ if(player.attack>0 && dist()<85 && enemy.stun<=0){enemy.hp=Math.max(0,enemy.hp-22);enemy.stun=.45}
+ if(player.grab>0 && dist()<85){enemy.x=player.x+player.dir*60}
+ if(enemy.stun>0)enemy.stun-=dt;
+ else if(dist()>85){enemy.x += Math.sign(player.x-enemy.x)*65*dt}
+ else if(enemy.attack<=0){enemy.attack=.8}
+ if(enemy.attack>0){enemy.attack-=dt;if(enemy.attack<.35&&enemy.attack>.25&&dist()<75&&!player.block)player.hp=Math.max(0,player.hp-12)}
+ if(enemy.hp<=0){status.textContent='تم إسقاط الخصم — النموذج الأول جاهز';}
+ else status.textContent=`الصحة: ${Math.round(player.hp)} | الخصم: ${Math.round(enemy.hp)}`;
+}
+
+function loop(t){let dt=Math.min(.033,(t-last)/1000||0);last=t;update(dt);draw();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+</script>
+</body>
+</html>
